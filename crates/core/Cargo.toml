@@ -1,0 +1,17 @@
+[package]
+name = "nabla-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+sqlx = { workspace = true }
+
+[dev-dependencies]
+tokio-test = "0.4"
+sqlx = { workspace = true, features = ["testing"] }

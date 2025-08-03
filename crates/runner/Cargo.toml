@@ -1,0 +1,15 @@
+[package]
+name = "nabla-runner"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nabla-core = { path = "../core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+async-trait = "0.1"
