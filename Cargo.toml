@@ -24,7 +24,7 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # Nabla CLI for binary analysis
-nabla-cli = "0.1"
+nabla-cli = { git = "https://github.com/usenabla-com/nabla", branch = "dev" }
 
 # HTTP/API dependencies
 axum = "0.7"

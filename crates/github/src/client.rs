@@ -1,8 +1,10 @@
 use octocrab::{Octocrab, Result as OctocrabResult};
+use octocrab::models::checks::{CheckRunStatus, CheckRunConclusion};
 use jsonwebtoken::{encode, Header, EncodingKey, Algorithm};
 use chrono::{Utc, Duration};
 use serde::{Serialize, Deserialize};
 use anyhow::{Result, anyhow};
+use snafu::Backtrace;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -68,7 +70,12 @@ impl GitHubClient {
 
     pub async fn create_octocrab_client(&self, installation_id: i64) -> OctocrabResult<Octocrab> {
         let token = self.get_installation_token(installation_id).await
-            .map_err(|e| octocrab::Error::Other(Box::new(e)))?;
+            .map_err(|e| {
+                octocrab::Error::Other {
+                    source: e.into(),
+                    backtrace: Backtrace::capture(),
+                }
+            })?;
 
         Octocrab::builder()
             .personal_token(token)
@@ -88,23 +95,41 @@ impl GitHubClient {
     ) -> Result<()> {
         let octocrab = self.create_octocrab_client(installation_id).await?;
         
-        let mut check_run = octocrab
+        let mut builder = octocrab
             .checks(owner, repo)
-            .create_check_run("Nabla Security Scan", head_sha)
-            .status(octocrab::models::checks::CheckRunStatus::try_from(status)?);
+            .create_check_run("Nabla Security Scan", head_sha);
 
-        if let Some(conclusion) = conclusion {
-            check_run = check_run.conclusion(octocrab::models::checks::CheckRunConclusion::try_from(conclusion)?);
+        let status_enum = match status {
+            "queued" => CheckRunStatus::Queued,
+            "in_progress" => CheckRunStatus::InProgress,
+            "completed" => CheckRunStatus::Completed,
+            _ => return Err(anyhow!("Invalid check run status")),
+        };
+        builder = builder.status(status_enum);
+
+        if let Some(conclusion_str) = conclusion {
+            let conclusion_enum = match conclusion_str {
+                "success" => CheckRunConclusion::Success,
+                "failure" => CheckRunConclusion::Failure,
+                "neutral" => CheckRunConclusion::Neutral,
+                "cancelled" => CheckRunConclusion::Cancelled,
+                "skipped" => CheckRunConclusion::Skipped,
+                "timed_out" => CheckRunConclusion::TimedOut,
+                "action_required" => CheckRunConclusion::ActionRequired,
+                _ => return Err(anyhow!("Invalid check run conclusion")),
+            };
+            builder = builder.conclusion(conclusion_enum);
         }
 
-        if let Some(output) = output {
-            if let (Some(title), Some(summary)) = (output.get("title").and_then(|v| v.as_str()), 
-                                                   output.get("summary").and_then(|v| v.as_str())) {
-                check_run = check_run.output(title, summary);
+        if let Some(output_val) = output {
+            if let (Some(title), Some(summary)) = (output_val.get("title").and_then(|v| v.as_str()), output_val.get("summary").and_then(|v| v.as_str())) {
+                builder = builder.output(title, summary);
             }
         }
 
-        check_run.send().await?;
+        builder.send().await
+            .map_err(|e| anyhow!("Failed to create check run: {}", e))?;
+        
         Ok(())
     }
 
@@ -121,7 +146,8 @@ impl GitHubClient {
         octocrab
             .issues(owner, repo)
             .create_comment(pr_number, body)
-            .await?;
+            .await
+            .map_err(|e| anyhow!("Failed to create PR comment: {}", e))?;
 
         Ok(())
     }

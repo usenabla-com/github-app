@@ -30,6 +30,18 @@ pub struct ScanConfiguration {
     pub include_cve_data: bool,
     pub generate_attestation: bool,
     pub binary_formats: Vec<BinaryFormat>,
+    pub advanced_config: Option<AdvancedScanConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdvancedScanConfig {
+    pub enable_static_analysis: bool,
+    pub enable_behavioral_analysis: bool,
+    pub enable_crypto_analysis: bool,
+    pub enable_supply_chain_detection: bool,
+    pub enable_exploitability_analysis: bool,
+    pub custom_yara_rules: Option<Vec<String>>,
+    pub max_analysis_depth: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +67,8 @@ pub struct ScanResult {
     pub file_hash: String,
     pub vulnerabilities: Vec<Vulnerability>,
     pub checks: Vec<SecurityCheck>,
+    pub findings: Vec<ScanFinding>,
+    pub control_flow_graph: Option<String>,
     pub scan_duration_ms: u64,
     pub timestamp: DateTime<Utc>,
 }
@@ -67,6 +81,7 @@ pub struct Vulnerability {
     pub description: String,
     pub cve_id: Option<String>,
     pub reachability: ExploitabilityAnalysis,
+    pub category: VulnerabilityCategory,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,4 +142,97 @@ pub struct Customer {
     pub events: Vec<serde_json::Value>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+// Advanced scanning types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum VulnerabilityCategory {
+    CVE,
+    StaticAnalysis,
+    Behavioral,
+    Cryptographic,
+    SupplyChain,
+    Exploitability,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanFinding {
+    pub id: String,
+    pub category: FindingCategory,
+    pub severity: SeverityLevel,
+    pub title: String,
+    pub description: String,
+    pub location: Option<CodeLocation>,
+    pub metadata: HashMap<String, serde_json::Value>,
+    pub confidence: ConfidenceLevel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FindingCategory {
+    StaticAnalysis(StaticAnalysisType),
+    Behavioral(BehavioralType),
+    Cryptographic(CryptoType),
+    SupplyChain(SupplyChainType),
+    Exploitability(ExploitabilityType),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StaticAnalysisType {
+    UnsafeFunction,
+    MemoryVulnerability,
+    DangerousSystemCall,
+    MissingSecurityHardening,
+    BufferOverflow,
+    IntegerOverflow,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BehavioralType {
+    SuspiciousControlFlow,
+    NetworkBeaconing,
+    DataExfiltration,
+    UnexpectedSystemInteraction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CryptoType {
+    HardcodedKey,
+    WeakAlgorithm,
+    DeprecatedCipher,
+    InsecureRandomness,
+    KeyReuse,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SupplyChainType {
+    MaliciousBytePattern,
+    HiddenFunctionality,
+    BuildMetadataAnomaly,
+    SuspiciousImport,
+    Backdoor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ExploitabilityType {
+    ReachableVulnerability,
+    PrivilegeEscalation,
+    RemoteCodeExecution,
+    DataLeakage,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeLocation {
+    pub file_path: String,
+    pub line_number: Option<u32>,
+    pub column_number: Option<u32>,
+    pub function_name: Option<String>,
+    pub binary_offset: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ConfidenceLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
 }

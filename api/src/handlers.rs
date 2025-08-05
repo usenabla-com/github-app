@@ -188,13 +188,31 @@ async fn process_scan_event(state: AppState, event: Value) -> anyhow::Result<()>
     ).await?;
 
     // Clone and scan the repository
-    let repo_url = format!("{}.git", repository.get("clone_url").and_then(|v| v.as_str()).unwrap_or(&format!("https://github.com/{}", repo_full_name)));
+    let repo_url = repository.get("clone_url")
+        .and_then(|v| v.as_str())
+        .map(|url| format!("{}.git", url))
+        .unwrap_or_else(|| {
+            // Extract base domain from github_api_base config for GHES compatibility
+            let base_url = state.config.github_api_base
+                .replace("/api/v3", "")  // Remove API path
+                .replace("api.", "");    // Handle api.github.com -> github.com
+            format!("{}/{}.git", base_url, repo_full_name)
+        });
     
     let scan_config = ScanConfiguration {
         severity_threshold: SeverityLevel::Medium,
         include_cve_data: auth_context.has_full_cve_access(),
         generate_attestation: auth_context.can_generate_attestations(),
         binary_formats: vec![BinaryFormat::ELF, BinaryFormat::PE, BinaryFormat::MachO, BinaryFormat::IntelHex],
+        advanced_config: Some(nabla_core::AdvancedScanConfig {
+            enable_static_analysis: auth_context.has_advanced_scanning(),
+            enable_behavioral_analysis: auth_context.has_behavioral_analysis(),
+            enable_crypto_analysis: true,
+            enable_supply_chain_detection: auth_context.has_supply_chain_detection(),
+            enable_exploitability_analysis: true,
+            custom_yara_rules: auth_context.get_custom_rules(),
+            max_analysis_depth: Some(10),
+        }),
     };
 
     let mut repo_scanner = RepoScanner::new();

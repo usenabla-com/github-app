@@ -1,4 +1,4 @@
-use nabla_core::{Customer, GitHubInstallation, DbPool};
+use nabla_core::{database::DbPool, Customer, GitHubInstallation};
 use anyhow::{Result, anyhow};
 use serde_json::Value;
 use chrono::{DateTime, Utc};
@@ -46,7 +46,7 @@ impl AuthService {
             account_type: row.account_type,
             permissions,
             events,
-            created_at: row.created_at,
+            created_at: row.created_at.unwrap_or_else(Utc::now),
             suspended_at: row.suspended_at,
         })
     }
@@ -54,7 +54,7 @@ impl AuthService {
     pub async fn get_customer_by_github_login(&self, github_login: &str) -> Result<Option<Customer>> {
         let row = sqlx::query!(
             r#"
-            SELECT id, name, email, github_account_login, features, events, created_at, updated_at
+            SELECT id, name, email, github_account_login, events, created_at, updated_at
             FROM customers 
             WHERE github_account_login = $1
             "#,
@@ -71,10 +71,9 @@ impl AuthService {
                     name: row.name,
                     email: row.email,
                     github_account_login: row.github_account_login,
-                    features: serde_json::from_value(row.features.unwrap_or_default())?,
                     events,
-                    created_at: row.created_at,
-                    updated_at: row.updated_at,
+                    created_at: row.created_at.unwrap_or_else(Utc::now),
+                    updated_at: row.updated_at.unwrap_or_else(Utc::now),
                 }))
             }
             None => Ok(None),
@@ -110,6 +109,7 @@ impl AuthService {
                 }
             }
             Some(("subscription_cancelled", _)) => Ok(SubscriptionStatus::Cancelled),
+            Some((&_, _)) => todo!(),
             None => Ok(SubscriptionStatus::None),
         }
     }
