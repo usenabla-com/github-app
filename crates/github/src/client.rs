@@ -1,10 +1,12 @@
-use octocrab::{Octocrab, Result as OctocrabResult};
-use octocrab::models::checks::{CheckRunStatus, CheckRunConclusion};
-use jsonwebtoken::{encode, Header, EncodingKey, Algorithm};
-use chrono::{Utc, Duration};
-use serde::{Serialize, Deserialize};
-use anyhow::{Result, anyhow};
-use snafu::Backtrace;
+use anyhow::{anyhow, Result};
+use chrono::{Duration, Utc};
+use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
+use octocrab::{
+    models::checks::{CheckRunConclusion, CheckRunStatus},
+    params::checks::CheckRunOutput,
+    Octocrab, OctocrabBuilder, Result as OctocrabResult,
+};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
@@ -45,10 +47,13 @@ impl GitHubClient {
 
     pub async fn get_installation_token(&self, installation_id: i64) -> Result<String> {
         let jwt = self.generate_jwt()?;
-        
+
         let client = reqwest::Client::new();
-        let url = format!("{}/app/installations/{}/access_tokens", self.api_base, installation_id);
-        
+        let url = format!(
+            "{}/app/installations/{}/access_tokens",
+            self.api_base, installation_id
+        );
+
         let response = client
             .post(&url)
             .header("Authorization", format!("Bearer {}", jwt))
@@ -58,26 +63,27 @@ impl GitHubClient {
             .await?;
 
         if !response.status().is_success() {
-            return Err(anyhow!("Failed to get installation token: {}", response.status()));
+            return Err(anyhow!(
+                "Failed to get installation token: {}",
+                response.status()
+            ));
         }
 
         let json: serde_json::Value = response.json().await?;
-        let token = json["token"].as_str()
+        let token = json["token"]
+            .as_str()
             .ok_or_else(|| anyhow!("Token not found in response"))?;
 
         Ok(token.to_string())
     }
 
     pub async fn create_octocrab_client(&self, installation_id: i64) -> OctocrabResult<Octocrab> {
-        let token = self.get_installation_token(installation_id).await
-            .map_err(|e| {
-                octocrab::Error::Other {
-                    source: e.into(),
-                    backtrace: Backtrace::capture(),
-                }
-            })?;
+        let token = self
+            .get_installation_token(installation_id)
+            .await
+            .map_err(|e| octocrab::Error::Other { source: e.into() })?;
 
-        Octocrab::builder()
+        OctocrabBuilder::new()
             .personal_token(token)
             .base_uri(&self.api_base)?
             .build()
@@ -94,7 +100,7 @@ impl GitHubClient {
         output: Option<serde_json::Value>,
     ) -> Result<()> {
         let octocrab = self.create_octocrab_client(installation_id).await?;
-        
+
         let mut builder = octocrab
             .checks(owner, repo)
             .create_check_run("Nabla Security Scan", head_sha);
@@ -122,14 +128,29 @@ impl GitHubClient {
         }
 
         if let Some(output_val) = output {
-            if let (Some(title), Some(summary)) = (output_val.get("title").and_then(|v| v.as_str()), output_val.get("summary").and_then(|v| v.as_str())) {
-                builder = builder.output(title, summary);
-            }
+            let title = output_val
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let summary = output_val
+                .get("summary")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            let output_struct = CheckRunOutput {
+                title: title.to_string(),
+                summary: summary.to_string(),
+                text: None,
+                annotations: None,
+                images: None,
+            };
+            builder = builder.output(output_struct);
         }
 
-        builder.send().await
+        builder
+            .send()
+            .await
             .map_err(|e| anyhow!("Failed to create check run: {}", e))?;
-        
+
         Ok(())
     }
 
@@ -141,8 +162,8 @@ impl GitHubClient {
         pr_number: u64,
         body: &str,
     ) -> Result<()> {
-        let octocrab = self.create_octocrab_client(installation_id).await?;
-        
+        let octocrab = self.create_octocrab__client(installation_id).await?;
+
         octocrab
             .issues(owner, repo)
             .create_comment(pr_number, body)

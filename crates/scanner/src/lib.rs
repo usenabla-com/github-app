@@ -8,7 +8,7 @@ use tokio::fs;
 
 // Import the functions from your nabla_cli crate
 use nabla_cli::binary::analyze_binary;
-use nabla_cli::binary::scanner::enterprise_scan_binary;
+use nabla_cli::binary::scanner::{enterprise_scan_binary, EnterpriseScanResult};
 
 pub mod types;
 pub use types::*;
@@ -34,11 +34,7 @@ impl BinaryScanner {
         // 3. Call the enterprise scanner with the analysis result
         let enterprise_result = enterprise_scan_binary(&analysis);
 
-        // 4. Build the Control Flow Graph
-        let cfg_result = nabla_cli::enterprise::secure::control_flow::build_cfg(&binary_data)?;
-        let control_flow_graph = serde_json::to_string_pretty(&cfg_result).ok();
-
-        // 5. Translate the vulnerability findings
+        // 4. Translate the vulnerability findings
         let vulnerabilities = enterprise_result.vulnerability_findings.into_iter().map(|v| {
             Vulnerability {
                 // Use the CVE ID as the primary ID if available, otherwise the title.
@@ -54,7 +50,9 @@ impl BinaryScanner {
 
         let scan_duration_ms = start_time.elapsed().as_millis() as u64;
 
-        // 6. Construct the final ScanResult for this application
+        let control_flow_graph = serde_json::to_string_pretty(&enterprise_result.behavioral_analysis.control_flow_anomalies).ok();
+
+        // 5. Construct the final ScanResult for this application
         Ok(ScanResult {
             scan_id,
             file_path: file_path.to_string_lossy().to_string(),
